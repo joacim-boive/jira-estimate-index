@@ -1,0 +1,22 @@
+{
+  "name": "jira-capex",
+  "homepage": "https://github.com/joacim-boive/jira-capex",
+  "authors": [
+    "joacim.boive@gmail.com"
+  ],
+  "description": "",
+  "main": "",
+  "license": "MIT",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "bootstrap": "^3",
+    "flatpickr": "^2.4.3"
+  }
+}
