@@ -1,23 +1,130 @@
 'use strict';
 {
-
     let toBase64 = (input) => {
         return window.btoa(decodeURIComponent(encodeURIComponent(input)));
     };
 
-    let getLoggedHours = (storage) => {
-        const headers = new Headers({
+    let headers;
+    let epicMap = {};
+
+    let getIndex = (storage) => {
+        let lookups = [];
+
+        headers = new Headers({
             'Authorization': 'Basic ' + toBase64(storage.login + ':' + storage.password),
             'Content-Type': 'application/json'
         });
 
+
         return new Promise((resolve, reject) => {
-            storage.fromDate = document.getElementById('dateFrom').value;
-            storage.toDate = document.getElementById('dateTo').value;
+                storage.fromDate = document.getElementById('dateFrom').value;
+                storage.toDate = document.getElementById('dateTo').value;
 
-            let workLogDates = ` and worklogDate >= ${storage.fromDate} & worklogDate <= ${storage.toDate}`;
+                let logDates = ` AND updatedDate >= ${storage.fromDate} AND updatedDate <= ${storage.toDate}`;
 
-            fetch(`${storage.url}/rest/api/2/search?jql=${storage.jql + workLogDates}&maxResults=1000`, {
+                fetch(`${storage.url}/rest/api/2/field`, {
+                    method: 'GET',
+                    redirect: 'follow',
+                    headers: headers
+                })
+                    .then(response => {
+                        return response.json()
+                    })
+                    .then(fields => {
+                        let link = fields.find((field) => {
+                            return field.name === 'Epic Link';
+                        });
+
+                        let name = fields.find((field) => {
+                            return field.name === 'Epic Name';
+                        });
+
+                        storage.epic = {};
+                        storage.epic.name = name.id;
+                        storage.epic.link = link.id;
+
+                    }).then(
+                    fetch(`${storage.url}/rest/api/2/search?jql=${storage.jql + logDates}&maxResults=1000`, {
+                        method: 'GET',
+                        redirect: 'follow',
+                        headers: headers
+                    })
+                        .then(response => {
+                            return response.json()
+                        })
+                        .then(jiras => {
+                                storage.fromDate = new Date(storage.fromDate);
+                                storage.toDate = new Date(storage.toDate);
+                                storage.report = {};
+                                storage.report.assignee = {};
+                                storage.report.total = 0;
+                                storage.report.issues = {};
+
+                                for (let issue of jiras.issues) {
+                                    let key = issue.fields.assignee.key;
+
+                                    storage.report.total++;
+
+
+                                    if (!storage.report.assignee[key]) {
+                                        storage.report.assignee[key] = {};
+                                        storage.report.assignee[key].aggregatetimeoriginalestimate = 0;
+                                        storage.report.assignee[key].aggregatetimespent = 0;
+                                        storage.report.assignee[key].index = 0;
+                                        storage.report.assignee[key].total = 0;
+                                        storage.report.assignee[key].displayName = '';
+                                        storage.report.assignee[key].data = [];
+                                        storage.report.assignee[key].epic = '';
+                                    }
+
+                                    storage.report.assignee[key].displayName = issue.fields.assignee.displayName;
+                                    storage.report.assignee[key].aggregatetimeoriginalestimate += issue.fields.aggregatetimeoriginalestimate;
+                                    storage.report.assignee[key].aggregatetimespent += issue.fields.aggregatetimespent;
+                                    storage.report.assignee[key].isSubtask = issue.fields.issuetype.subtask;
+                                    storage.report.assignee[key].total++;
+
+
+                                    if (storage.report.assignee[key].isSubtask) {
+                                        lookups.push(
+                                            fetch(issue.fields.parent.self, {
+                                                method: 'GET',
+                                                redirect: 'follow',
+                                                headers: headers,
+                                                data: storage.report.assignee[key]
+                                            })
+                                                .then(response => {
+                                                    return response.json()
+                                                })
+                                                .then(parentIssue => {
+
+                                                    return setEpicName(storage.report.assignee[key], parentIssue, storage.epic, storage.url);
+                                                })
+                                        )
+                                    } else {
+                                        lookups.push(setEpicName(storage.report.assignee[key], issue, storage.epic, storage.url));
+                                    }
+                                }
+
+                                Promise.all(lookups).then(() => {
+                                    console.table(storage.report);
+                                    resolve(storage.report);
+                                }, reason => {
+                                    debugger;
+                                    console.log(reason);
+                                    reject(reason);
+                                });
+                            }
+                        )
+                )
+            }
+        )
+    };
+
+    let setEpicName = (store, issue, epic, url) => {
+        if (epicMap[epic.name]) {
+            Promise.resolve(epicMap[epic.name]);
+        } else {
+            return fetch(`${url}/rest/api/2/issue/${issue.fields[epic.link]}`, {
                 method: 'GET',
                 redirect: 'follow',
                 headers: headers
@@ -25,67 +132,12 @@
                 .then(response => {
                     return response.json()
                 })
-                .then(jiras => {
-                    let lookups = [];
+                .then(thisEpic => {
+                    store.epic = thisEpic.fields[epic.name];
 
-                    storage.fromDate = new Date(storage.fromDate);
-                    storage.toDate = new Date(storage.toDate);
-                    storage.report = {};
-                    storage.report.total = 0;
-                    storage.report.issues = {};
-
-                    for (let issue of jiras.issues) {
-                        if (issue.fields.issuetype.subtask === false) {
-                            lookups.push(fetch(issue.self, {
-                                    method: 'GET',
-                                    redirect: 'follow',
-                                    headers: headers
-                                }).then(response => {
-                                    return response.json()
-                                })
-                                    .then(issueDetails => {
-                                        let thisDate = '';
-                                        let key = issueDetails.key;
-
-                                        for (let log of issueDetails.fields.worklog.worklogs) {
-                                            thisDate = new Date(log.updated.split('T')[0]);
-
-                                            if (thisDate >= storage.fromDate && thisDate <= storage.toDate) {
-                                                if (!storage.report.issues[key]) {
-                                                    storage.report.issues[key] = {};
-                                                    storage.report.issues[key].details = {};
-                                                    storage.report.issues[key].data = [];
-                                                }
-
-                                                storage.report.issues[key].details.key = key;
-                                                storage.report.issues[key].details.status = issueDetails.fields.status.name;
-                                                storage.report.issues[key].details.summary = issueDetails.fields.summary;
-
-                                                storage.report.total += log.timeSpentSeconds;
-
-                                                storage.report.issues[key].data.push({
-                                                    'updated': log.updated,
-                                                    'displayName': log.updateAuthor.displayName,
-                                                    'timeSpentSeconds': log.timeSpentSeconds
-                                                })
-                                            }
-                                        }
-                                    })
-                            )
-                        }
-                    }
-
-
-                    Promise.all(lookups).then(() => {
-                        console.table(storage.report);
-                        resolve(storage.report);
-                    }, reason => {
-                        debugger;
-                        console.log(reason);
-                        reject(reason);
-                    })
+                    epicMap[epic.name] = thisEpic.fields[epic.name];
                 })
-        })
+        }
     };
 
     let createReport = (data) => {
@@ -103,7 +155,7 @@
                     let thisDetails = '';
 
                     for (let log of data.data) {
-                        thisDetails += `${row}<td>${log.displayName}</td><td>${log.updated}</td><td>${log.timeSpentSeconds/3600}</td></tr>`;
+                        thisDetails += `${row}<td>${log.displayName}</td><td>${log.updated}</td><td>${log.timeSpentSeconds / 3600}</td></tr>`;
                     }
 
                     html += thisDetails;
@@ -112,7 +164,7 @@
         }
 
         html += '</tr></table>';
-debugger;
+        debugger;
         holder.innerHTML = html;
         document.getElementById('total').innerHTML = parseInt(data.total) / 3600;
 
@@ -132,7 +184,8 @@ debugger;
             'password': '',
             'jql': ''
         }, function (storage) {
-            getLoggedHours(storage).then(data => createReport(data));
+            // getIndex(storage).then(data => createReport(data));
+            getIndex(storage)
         })
     };
 
