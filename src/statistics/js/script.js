@@ -5,9 +5,34 @@
     };
 
     let headers;
-    let epicMap = {};
 
-    let getIndex = (storage) => {
+    let getEpicInfo = (url) => {
+        return fetch(`${url}/rest/api/2/field`, {
+            method: 'GET',
+            redirect: 'follow',
+            headers: headers
+        })
+            .then(response => {
+                return response.json()
+            })
+            .then(fields => {
+                let link = fields.find((field) => {
+                    return field.name === 'Epic Link';
+                });
+
+                let name = fields.find((field) => {
+                    return field.name === 'Epic Name';
+                });
+
+                let epic = {};
+                epic.name = name.id;
+                epic.link = link.id;
+
+                return epic;
+            })
+    };
+
+    let getIndex = async (storage) => {
         let lookups = [];
 
         headers = new Headers({
@@ -15,6 +40,7 @@
             'Content-Type': 'application/json'
         });
 
+        const epic = await getEpicInfo(storage.url);
 
         return new Promise((resolve, reject) => {
                 storage.fromDate = document.getElementById('dateFrom').value;
@@ -62,9 +88,9 @@
 
                                 for (let issue of jiras.issues) {
                                     let key = issue.fields.assignee.key;
+                                    let data = {};
 
                                     storage.report.total++;
-
 
                                     if (!storage.report.assignee[key]) {
                                         storage.report.assignee[key] = {};
@@ -83,6 +109,10 @@
                                     storage.report.assignee[key].isSubtask = issue.fields.issuetype.subtask;
                                     storage.report.assignee[key].total++;
 
+                                    data.aggregatetimeoriginalestimate = issue.fields.aggregatetimeoriginalestimate;
+                                    data.aggregatetimespent = issue.fields.aggregatetimespent;
+
+                                    storage.report.assignee[key].data.push(data);
 
                                     if (storage.report.assignee[key].isSubtask) {
                                         lookups.push(
@@ -97,7 +127,7 @@
                                                 })
                                                 .then(parentIssue => {
 
-                                                    return setEpicName(storage.report.assignee[key], parentIssue, storage.epic, storage.url);
+                                                    lookups.push(setEpicName(data, parentIssue, storage.epic, storage.url));
                                                 })
                                         )
                                     } else {
@@ -120,24 +150,18 @@
         )
     };
 
-    let setEpicName = (store, issue, epic, url) => {
-        if (epicMap[epic.name]) {
-            Promise.resolve(epicMap[epic.name]);
-        } else {
-            return fetch(`${url}/rest/api/2/issue/${issue.fields[epic.link]}`, {
-                method: 'GET',
-                redirect: 'follow',
-                headers: headers
+    let setEpicName = (data, issue, epic, url) => {
+        return fetch(`${url}/rest/api/2/issue/${issue.fields[epic.link]}`, {
+            method: 'GET',
+            redirect: 'follow',
+            headers: headers
+        })
+            .then(response => {
+                return response.json()
             })
-                .then(response => {
-                    return response.json()
-                })
-                .then(thisEpic => {
-                    store.epic = thisEpic.fields[epic.name];
-
-                    epicMap[epic.name] = thisEpic.fields[epic.name];
-                })
-        }
+            .then(thisEpic => {
+                data.epic = thisEpic.fields[epic.name];
+            })
     };
 
     let createReport = (data) => {

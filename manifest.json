@@ -9,6 +9,7 @@
     "80": "icons/icon80.png",
     "128": "icons/icon128.png"
   },
+
   "browser_action": {
     "default_icon": "icons/icon19.png",
     "default_title": "JIRA Estimate Index",
@@ -18,5 +19,6 @@
     "tabs",
     "storage",
     "<all_urls>"
-  ]
+  ],
+  "minimum_chrome_version": "55"
 }
