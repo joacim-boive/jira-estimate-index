@@ -72,6 +72,8 @@
     };
 
     let getIndex = async (storage) => {
+        let epics = '';
+
         headers = new Headers({
             'Authorization': 'Basic ' + toBase64(storage.login + ':' + storage.password),
             'Content-Type': 'application/json'
@@ -89,8 +91,16 @@
         storage.report.issues = {};
 
         for (let issue of jiras.issues) {
-            let key = issue.fields.assignee.key;
+            let assignee = issue.fields.assignee;
+            let key = '';
             let data = {};
+
+            if (assignee) {
+                key = assignee.key;
+            } else {
+                console.info('You should opitimize the JQL to exclude unassigned JIRAs');
+                continue;
+            }
 
             storage.report.total++;
 
@@ -107,17 +117,18 @@
             storage.report.assignee[key].displayName = issue.fields.assignee.displayName;
             storage.report.assignee[key].aggregatetimeoriginalestimate += issue.fields.aggregatetimeoriginalestimate;
             storage.report.assignee[key].aggregatetimespent += issue.fields.aggregatetimespent;
-            storage.report.assignee[key].isSubtask = issue.fields.issuetype.subtask;
             storage.report.assignee[key].total++;
 
             data.aggregatetimeoriginalestimate = issue.fields.aggregatetimeoriginalestimate;
             data.aggregatetimespent = issue.fields.aggregatetimespent;
 
-            if (storage.report.assignee[key].isSubtask) {
+            if (issue.fields.issuetype.subtask) {
                 issue = await getParent(issue);
             }
 
             data.epicName = await getEpicName(issue, epic, storage.url);
+            data.isSubtask = issue.fields.issuetype.subtask;
+
             storage.report.epics.push(data.epicName);
 
             storage.report.assignee[key].data.push(data);
@@ -131,6 +142,8 @@
 
         storage.report.epics = [...new Set(storage.report.epics)];
 
+        createReport(storage.report);
+
         console.log(storage);
 
     };
@@ -138,33 +151,33 @@
     let createReport = (data) => {
         let holder = document.getElementById('holder');
         let loading = document.getElementById('loading');
-        let total = 0;
-        let html = '<h3>Total hours for period: <span id="total"></span></h3><table class="table table-striped table-bordered table-hover"><tr><th>ID</th><th>Summary</th><th>Status</th><th>User</th><th>Date</th><th>Hours</th></tr>';
+        let html = '<table class="table table-striped table-bordered table-hover"><tr><th>User</th><th>Index</th><th>Epics</th></tr>';
+        let epics = '';
+        let memberOfEpics;
 
-        for (let [key, value] of Object.entries(data)) {
-            if (key === 'total') {
-                total = value;
-            } else {
-                for (let [key, data] of Object.entries(value)) {
-                    const row = `<tr><td>${key}</td><td>${data.details.summary}</td><td>${data.details.status}</td>`;
-                    let thisDetails = '';
-
-                    for (let log of data.data) {
-                        thisDetails += `${row}<td>${log.displayName}</td><td>${log.updated}</td><td>${log.timeSpentSeconds / 3600}</td></tr>`;
-                    }
-
-                    html += thisDetails;
-                }
-            }
+        for (let epic of data.epics) {
+            epics += `<label class="btn btn-primary active">
+                        <input type="checkbox" autocomplete="off" checked id="${encodeURIComponent(epic)}"> ${epic}
+                      </label>`;
         }
 
-        html += '</tr></table>';
-        debugger;
-        holder.innerHTML = html;
-        document.getElementById('total').innerHTML = parseInt(data.total) / 3600;
+        html += `<div class="btn-group" data-toggle="buttons">${epics}</div>`;
 
-        loading.classList.add('bounceOut');
-        holder.classList.add('bounceIn');
+        for (let assignee in data.assignee) {
+            memberOfEpics = data.assignee[assignee].data.map((issue) => {
+                return `<span class="${encodeURIComponent(issue.epicName)}">${issue.epicName}</span>`;
+            });
+
+            memberOfEpics = [...new Set(memberOfEpics)].join(', ');
+
+            html += `<tr><td>${data.assignee[assignee].displayName}</td><td>${data.assignee[assignee].index}</td><td>${memberOfEpics}</td></tr>`
+        }
+
+
+        html += '</tr></table>';
+        holder.innerHTML = html;
+
+        loading.classList.add('hide');
         holder.classList.remove('hide');
     };
 

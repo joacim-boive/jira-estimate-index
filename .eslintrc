@@ -1,5 +1,4 @@
 {
-  "extends": "airbnb",
   "env": {
     "browser": 1, //browser global variables.
     "jquery": 1, //jquery global variables.
