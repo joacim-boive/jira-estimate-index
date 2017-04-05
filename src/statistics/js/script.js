@@ -5,6 +5,7 @@
     };
 
     let headers;
+    let report;
 
     let getEpicInfo = (url) => {
         return fetch(`${url}/rest/api/2/field`, {
@@ -72,8 +73,6 @@
     };
 
     let getIndex = async (storage) => {
-        let epics = '';
-
         headers = new Headers({
             'Authorization': 'Basic ' + toBase64(storage.login + ':' + storage.password),
             'Content-Type': 'application/json'
@@ -132,6 +131,8 @@
             storage.report.epics.push(data.epicName);
 
             storage.report.assignee[key].data.push(data);
+
+            report = storage.report;
         }
 
         for (let [key, data] of Object.entries(storage.report.assignee)) {
@@ -142,30 +143,36 @@
 
         storage.report.epics = [...new Set(storage.report.epics)];
 
+        storage.report.activeEpics = storage.report.epics;
+
+        createEpics(storage.report.epics);
         createReport(storage.report);
 
         console.log(storage);
 
     };
 
+    let createEpics = (epics) => {
+        let epicButtons = '';
+
+        for (let epic of epics) {
+            epicButtons += `<label class="btn btn-primary active">
+                        <input type="checkbox" autocomplete="off" checked data-name="${epic}" id="${epic.replace(/[ +,.'&]/g, '')}"> ${epic}
+                      </label>`;
+        }
+
+        document.getElementById('epics').innerHTML = epicButtons;
+    };
+
     let createReport = (data) => {
         let holder = document.getElementById('holder');
         let loading = document.getElementById('loading');
         let html = '<table class="table table-striped table-bordered table-hover"><tr><th>User</th><th>Index</th><th>Epics</th></tr>';
-        let epics = '';
         let memberOfEpics;
-
-        for (let epic of data.epics) {
-            epics += `<label class="btn btn-primary active">
-                        <input type="checkbox" autocomplete="off" checked id="${encodeURIComponent(epic)}"> ${epic}
-                      </label>`;
-        }
-
-        html += `<div class="btn-group" data-toggle="buttons">${epics}</div>`;
 
         for (let assignee in data.assignee) {
             memberOfEpics = data.assignee[assignee].data.map((issue) => {
-                return `<span class="${encodeURIComponent(issue.epicName)}">${issue.epicName}</span>`;
+                return `<span class="${issue.epicName.replace(/[ +,.'&]/g, '')} ${data.activeEpics.includes(issue.epicName) ? '' : 'inactive'}">${issue.epicName}</span>`;
             });
 
             memberOfEpics = [...new Set(memberOfEpics)].join(', ');
@@ -197,6 +204,60 @@
         })
     };
 
+    let setEpic = (e) => {
+        let checkbox = e.target.querySelector('input[type="checkbox"]');
+        let thisReport = JSON.parse(JSON.stringify(report));
+
+        if (!checkbox) {
+            return;
+        }
+
+        let isChecked = checkbox.checked;
+        let id = checkbox.id;
+        let boxes = [];
+        let epics = [];
+        let action = '';
+
+        if (isChecked) {
+            boxes = document.querySelectorAll(`.${id}.inactive`);
+            action = 'remove';
+        } else {
+            boxes = document.querySelectorAll(`.${id}`);
+            action = 'add';
+        }
+
+        for (let box of boxes) {
+            box.classList[action]('inactive');
+        }
+
+        let epicsChecked = document.querySelectorAll('input[type="checkbox"]:checked');
+
+        for(let epic of epicsChecked){
+            if(epic.id !== id){
+                epics.push(epic.dataset.name);
+            }else if(epic.id === id && isChecked){
+                epics.push(epic.dataset.name);
+            }
+        }
+
+        for(let asignee in report.assignee){
+            let aggregatetimeoriginalestimate = 0;
+            let aggregatetimespent = 0;
+
+            for(let data of report.assignee[asignee].data){
+                if(epics.includes(data.epicName)){
+                    aggregatetimeoriginalestimate += data.aggregatetimeoriginalestimate;
+                    aggregatetimespent += data.aggregatetimespent;
+                }
+            }
+
+            thisReport.assignee[asignee].index = aggregatetimeoriginalestimate / aggregatetimespent;
+        }
+
+        thisReport.activeEpics = epics;
+
+        createReport(thisReport);
+    };
 
     let init = () => {
         Flatpickr.l10ns.default.firstDayOfWeek = 1;
@@ -207,14 +268,12 @@
             maxDate: new Date()
         });
 
-        document.querySelectorAll('input').forEach((input) => {
-            input.addEventListener('onclick', () => {
-                let data = {};
-
-                data[input.id] = input.value;
-
-                chrome.storage.local.set(data);
-            })
+        document.getElementById('epics').addEventListener('click', (event) => {
+            (function(e){
+                setTimeout(() => {
+                    setEpic(e);
+                }, 300)
+            }(event))
         });
 
         document.getElementById('doIt').addEventListener('click', getStorage);
