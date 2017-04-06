@@ -81,10 +81,12 @@
         const epic = await getEpicInfo(storage.url);
         const jiras = await getJIRAs(storage.url, storage.jql);
 
+        let map = new Map();
+
         storage.fromDate = new Date(storage.fromDate);
         storage.toDate = new Date(storage.toDate);
         storage.report = {};
-        storage.report.assignee = {};
+        storage.report.assignee = [];
         storage.report.total = 0;
         storage.report.epics = [];
         storage.report.issues = {};
@@ -93,6 +95,7 @@
             let assignee = issue.fields.assignee;
             let key = '';
             let data = {};
+            let user = {};
 
             if (assignee) {
                 key = assignee.key;
@@ -103,20 +106,22 @@
 
             storage.report.total++;
 
-            if (!storage.report.assignee[key]) {
-                storage.report.assignee[key] = {};
-                storage.report.assignee[key].aggregatetimeoriginalestimate = 0;
-                storage.report.assignee[key].aggregatetimespent = 0;
-                storage.report.assignee[key].index = 0;
-                storage.report.assignee[key].total = 0;
-                storage.report.assignee[key].displayName = '';
-                storage.report.assignee[key].data = [];
+            if(!map.has(key)){
+                map.set(key, {
+                    aggregatetimeoriginalestimate: 0,
+                    aggregatetimespent: 0,
+                    index: 0,
+                    total: 0,
+                    displayName: issue.fields.assignee.displayName,
+                    data: []
+                });
             }
 
-            storage.report.assignee[key].displayName = issue.fields.assignee.displayName;
-            storage.report.assignee[key].aggregatetimeoriginalestimate += issue.fields.aggregatetimeoriginalestimate;
-            storage.report.assignee[key].aggregatetimespent += issue.fields.aggregatetimespent;
-            storage.report.assignee[key].total++;
+            user = map.get(key);
+
+            user.aggregatetimeoriginalestimate += issue.fields.aggregatetimeoriginalestimate;
+            user.aggregatetimespent += issue.fields.aggregatetimespent;
+            user.total++;
 
             data.aggregatetimeoriginalestimate = issue.fields.aggregatetimeoriginalestimate;
             data.aggregatetimespent = issue.fields.aggregatetimespent;
@@ -130,15 +135,17 @@
 
             storage.report.epics.push(data.epicName);
 
-            storage.report.assignee[key].data.push(data);
+            user.data.push(data);
 
             report = storage.report;
         }
 
-        for (let [key, data] of Object.entries(storage.report.assignee)) {
-            let report = storage.report.assignee[key];
+        storage.report.assignee = map;
 
-            report.index = report.aggregatetimeoriginalestimate / report.aggregatetimespent;
+        for (let key of map.keys()) {
+            let user = map.get(key);
+
+            user.index = user.aggregatetimeoriginalestimate / user.aggregatetimespent
         }
 
         storage.report.epics = [...new Set(storage.report.epics)];
@@ -169,15 +176,23 @@
         let loading = document.getElementById('loading');
         let html = '<table class="table table-striped table-bordered table-hover"><tr><th>User</th><th>Index</th><th>Epics</th></tr>';
         let memberOfEpics;
+        let users = Array.from(data.assignee);
 
-        for (let assignee in data.assignee) {
-            memberOfEpics = data.assignee[assignee].data.map((issue) => {
+        users.sort((a,b) =>{
+            return a[1].index < b[1].index;
+        });
+
+        for (const [index, thisData] of users.entries()) {
+            let key = thisData[0];
+            let info = thisData[1];
+
+            memberOfEpics = info.data.map((issue) => {
                 return `<span class="${issue.epicName.replace(/[ +,.'&]/g, '')} ${data.activeEpics.includes(issue.epicName) ? '' : 'inactive'}">${issue.epicName}</span>`;
             });
 
             memberOfEpics = [...new Set(memberOfEpics)].join(', ');
 
-            html += `<tr><td>${data.assignee[assignee].displayName}</td><td>${data.assignee[assignee].index}</td><td>${memberOfEpics}</td></tr>`
+            html += `<tr><td>${info.displayName}</td><td>${info.index}</td><td>${memberOfEpics}</td></tr>`
         }
 
 
