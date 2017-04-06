@@ -59,6 +59,12 @@
     };
 
     let getEpicName = (issue, epic, url) => {
+        let epicLink = issue.fields[epic.link];
+
+        if(!epicLink){
+            return Promise.resolve('NO-EPIC');
+        }
+
         return fetch(`${url}/rest/api/2/issue/${issue.fields[epic.link]}`, {
             method: 'GET',
             redirect: 'follow',
@@ -178,8 +184,14 @@
         let memberOfEpics;
         let users = Array.from(data.assignee);
 
+        users = users.filter((user) => {
+            if(!isNaN(user[1].index)){
+                return user;
+            }
+        });
+
         users.sort((a,b) =>{
-            return a[1].index < b[1].index;
+            return parseFloat(b[1].index) - parseFloat(a[1].index);
         });
 
         for (const [index, thisData] of users.entries()) {
