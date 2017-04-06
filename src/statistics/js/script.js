@@ -233,7 +233,7 @@
 
     let setEpic = (e) => {
         let checkbox = e.target.querySelector('input[type="checkbox"]');
-        let thisReport = JSON.parse(JSON.stringify(report));
+        let thisReport = Object.assign({}, report);
 
         if (!checkbox) {
             return;
@@ -267,18 +267,18 @@
             }
         }
 
-        for(let asignee in report.assignee){
+        for(let [key, info] of report.assignee){
             let aggregatetimeoriginalestimate = 0;
             let aggregatetimespent = 0;
 
-            for(let data of report.assignee[asignee].data){
+            for(let data of info.data){
                 if(epics.includes(data.epicName)){
                     aggregatetimeoriginalestimate += data.aggregatetimeoriginalestimate;
                     aggregatetimespent += data.aggregatetimespent;
                 }
             }
 
-            thisReport.assignee[asignee].index = aggregatetimeoriginalestimate / aggregatetimespent;
+            thisReport.assignee.get(key).index = aggregatetimeoriginalestimate / aggregatetimespent;
         }
 
         thisReport.activeEpics = epics;
