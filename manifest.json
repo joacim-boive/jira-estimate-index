@@ -1,6 +1,6 @@
 {
   "name": "JIRA Estimate Index",
-  "version": "0.0.0.1",
+  "version": "0.0.0.3",
   "manifest_version": 2,
   "description": "Review estimates compared to actual delivery",
   "icons": {
