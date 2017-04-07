@@ -61,7 +61,7 @@
     let getEpicName = (issue, epic, url) => {
         let epicLink = issue.fields[epic.link];
 
-        if(!epicLink){
+        if (!epicLink) {
             return Promise.resolve('NO-EPIC');
         }
 
@@ -112,7 +112,7 @@
 
             storage.report.total++;
 
-            if(!map.has(key)){
+            if (!map.has(key)) {
                 map.set(key, {
                     aggregatetimeoriginalestimate: 0,
                     aggregatetimespent: 0,
@@ -158,40 +158,52 @@
 
         storage.report.activeEpics = storage.report.epics;
 
-        createEpics(storage.report.epics);
+        createEpics(storage);
         createReport(storage.report);
 
         console.log(storage);
 
     };
 
-    let createEpics = (epics) => {
+    let getWebSafeName = (data) => {
+        return 'X--' + data.replace(/[ +,.'&/()%]/g, '');
+    };
+
+    let createEpics = (data) => {
+        const epics = data.report.epics;
         let epicButtons = '';
+        let isChecked = false;
 
         for (let epic of epics) {
-            epicButtons += `<label class="btn btn-primary active">
-                        <input type="checkbox" autocomplete="off" checked data-name="${epic}" id="${epic.replace(/[ +,.'&]/g, '')}"> ${epic}
+            isChecked = data[getWebSafeName(epic)];
+
+            if(typeof(isChecked) !== 'boolean'){
+                isChecked = true;
+            }
+
+            epicButtons += `<label class="btn btn-primary${isChecked ? ' active' : ''}">
+                        <input type="checkbox" autocomplete="off" checked="${isChecked}" data-name="${epic}" id="${getWebSafeName(epic)}"> ${epic}
                       </label>`;
         }
 
-        document.getElementById('epics').innerHTML = epicButtons;
+        document.getElementById('epics-list').innerHTML = epicButtons;
     };
 
     let createReport = (data) => {
-        let holder = document.getElementById('holder');
+        let holder = document.getElementById('user-stats');
         let loading = document.getElementById('loading');
         let html = '<table class="table table-striped table-bordered table-hover"><tr><th>User</th><th>Index</th><th>Epics</th></tr>';
         let memberOfEpics;
         let users = Array.from(data.assignee);
 
         users = users.filter((user) => {
-            if(!isNaN(user[1].index)){
+            if (!isNaN(user[1].index)) { //Hide users that have no data.
                 return user;
             }
         });
 
-        users.sort((a,b) =>{
-            return parseFloat(b[1].index) - parseFloat(a[1].index);
+        users.sort((a, b) => {
+            return parseFloat(b[1].index) - parseFloat(a[1].index); //Sort in descending order.
         });
 
         for (const [index, thisData] of users.entries()) {
@@ -199,7 +211,7 @@
             let info = thisData[1];
 
             memberOfEpics = info.data.map((issue) => {
-                return `<span class="${issue.epicName.replace(/[ +,.'&]/g, '')} ${data.activeEpics.includes(issue.epicName) ? '' : 'inactive'}">${issue.epicName}</span>`;
+                return `<span class="${getWebSafeName(issue.epicName)} ${data.activeEpics.includes(issue.epicName) ? '' : 'inactive'}">${issue.epicName}</span>`;
             });
 
             memberOfEpics = [...new Set(memberOfEpics)].join(', ');
@@ -220,12 +232,7 @@
 
         loading.classList.remove('hide');
 
-        chrome.storage.local.get({
-            'url': '',
-            'login': '',
-            'password': '',
-            'jql': ''
-        }, function (storage) {
+        chrome.storage.local.get(function (storage) {
             // getIndex(storage).then(data => createReport(data));
             getIndex(storage)
         })
@@ -259,20 +266,20 @@
 
         let epicsChecked = document.querySelectorAll('input[type="checkbox"]:checked');
 
-        for(let epic of epicsChecked){
-            if(epic.id !== id){
+        for (let epic of epicsChecked) {
+            if (epic.id !== id) {
                 epics.push(epic.dataset.name);
-            }else if(epic.id === id && isChecked){
+            } else if (epic.id === id && isChecked) {
                 epics.push(epic.dataset.name);
             }
         }
 
-        for(let [key, info] of report.assignee){
+        for (let [key, info] of report.assignee) {
             let aggregatetimeoriginalestimate = 0;
             let aggregatetimespent = 0;
 
-            for(let data of info.data){
-                if(epics.includes(data.epicName)){
+            for (let data of info.data) {
+                if (epics.includes(data.epicName)) {
                     aggregatetimeoriginalestimate += data.aggregatetimeoriginalestimate;
                     aggregatetimespent += data.aggregatetimespent;
                 }
@@ -295,11 +302,19 @@
             maxDate: new Date()
         });
 
-        document.getElementById('epics').addEventListener('click', (event) => {
-            (function(e){
+        document.getElementById('epics-list').addEventListener('click', (event) => {
+            (function (e) {
                 setTimeout(() => {
                     setEpic(e);
-                }, 300)
+
+                    let field = event.target.control;
+                    let data = {};
+
+                    data[field.id] = field.checked;
+                    chrome.storage.local.set(data);
+
+                }, 300);
+
             }(event))
         });
 
