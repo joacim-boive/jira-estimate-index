@@ -158,11 +158,9 @@
 
         storage.report.activeEpics = storage.report.epics;
 
-        createEpics(storage);
-        createReport(storage.report);
-
-        console.log(storage);
-
+        if(createEpics(storage)){
+            createReport(storage.report);
+        }
     };
 
     let getWebSafeName = (data) => {
@@ -173,20 +171,35 @@
         const epics = data.report.epics;
         let epicButtons = '';
         let isChecked = false;
+        let hasDisabledEpics = false;
 
         for (let epic of epics) {
             isChecked = data[getWebSafeName(epic)];
 
-            if(typeof(isChecked) !== 'boolean'){
+            if (typeof(isChecked) !== 'boolean') {
                 isChecked = true;
             }
 
+            if (!isChecked) {
+                hasDisabledEpics = true;
+            }
+
             epicButtons += `<label class="btn btn-primary${isChecked ? ' active' : ''}">
-                        <input type="checkbox" autocomplete="off" checked="${isChecked}" data-name="${epic}" id="${getWebSafeName(epic)}"> ${epic}
+                        <input type="checkbox" autocomplete="off" ${isChecked ? 'checked': ''} data-name="${epic}" id="${getWebSafeName(epic)}"> ${epic}
                       </label>`;
         }
 
         document.getElementById('epics-list').innerHTML = epicButtons;
+
+        if (hasDisabledEpics) {
+            setTimeout(() => {
+                createReportForLimitedEpics();
+
+            }, 300);
+            return false;
+        }else{
+            return true;
+        }
     };
 
     let createReport = (data) => {
@@ -238,9 +251,8 @@
         })
     };
 
-    let setEpic = (e) => {
+    let setEpicsForUsers = (e) => {
         let checkbox = e.target.querySelector('input[type="checkbox"]');
-        let thisReport = Object.assign({}, report);
 
         if (!checkbox) {
             return;
@@ -249,7 +261,6 @@
         let isChecked = checkbox.checked;
         let id = checkbox.id;
         let boxes = [];
-        let epics = [];
         let action = '';
 
         if (isChecked) {
@@ -263,13 +274,15 @@
         for (let box of boxes) {
             box.classList[action]('inactive');
         }
+    };
 
+    let createReportForLimitedEpics = () => {
+        let epics = [];
         let epicsChecked = document.querySelectorAll('input[type="checkbox"]:checked');
+        let thisReport = Object.assign({}, report); //Copy the object
 
         for (let epic of epicsChecked) {
-            if (epic.id !== id) {
-                epics.push(epic.dataset.name);
-            } else if (epic.id === id && isChecked) {
+            if (epic.checked) {
                 epics.push(epic.dataset.name);
             }
         }
@@ -304,8 +317,10 @@
 
         document.getElementById('epics-list').addEventListener('click', (event) => {
             (function (e) {
+                setEpicsForUsers(e);
+
                 setTimeout(() => {
-                    setEpic(e);
+                    createReportForLimitedEpics();
 
                     let field = event.target.control;
                     let data = {};
