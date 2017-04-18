@@ -6,6 +6,8 @@
 
     let headers;
     let report;
+    let areWeStillWaiting = false;
+
     let notify = (config) => {
         $.notify({
             // options
@@ -28,7 +30,7 @@
             offset: 20,
             spacing: 10,
             z_index: 1031,
-            delay: 7000,
+            delay: 14000,
             timer: 1000,
             url_target: '_blank',
             mouse_over: true,
@@ -85,7 +87,13 @@
             headers: headers
         })
             .then(response => {
+                if(!response.ok){
+                    throw Error(response.status);
+                }
+
                 return response.json()
+            }).catch(error =>{
+                return {'code': error.message}
             })
     };
 
@@ -134,16 +142,20 @@
     };
 
     let getQuote = async () => {
+
+        if(!areWeStillWaiting){
+            return;
+        }
+
         let quote = await doTheChuck();
         let titles = [
-            '<div>This is taking some time...</div><div>Enjoy this Chuck Norris quote while you wait:</div>',
             '<div>It\'s not called the World Wide Wait for nothing!</div><div>Here\'s another quote:</div>',
             '<div>Knock-Knock! Who\'s there?</div><div>It\'s another Chuck Norris quote:</div>',
             '<div>Should we sing a song while we wait?</div><div>Nah, let\'s do another Chuck Norris quote:</div>',
             '<div>No, y\'ruoe not mroe itneillengt bceuase you can raed tihs</div><div>Here\'s another quote to make you feel better:</div>',
             '<div>I actually get payed to do stuff like this!</div><div>Let\'s celebrate that with another Chuck Norris quote:</div>',
             '<div>Guess what?!</div><div>It\s Chuck Norris quote time (again):</div>',
-            '<div>What are you still doing here..?</div><div>Here\'s another Chuck Norris quote, now leave me alone:</div>'
+            '<div>What are you still bugging me for?!</div><div>Here\'s another Chuck Norris quote - now leave me alone:</div>'
         ];
 
         if (quoteCount === 0) {
@@ -155,25 +167,48 @@
         } else {
             notify({
                 type: 'info',
-                title: '<div>It\'s not called the World Wide Wait for nothing!</div><div>Here\'s another quote:</div>',
+                title: titles[Math.floor(Math.random() * titles.length)],
                 message: `<div>${quote.value}</div>`,
                 url: quote.url
             });
         }
 
-        return setTimeout(getQuote, 5000);
+        quoteCount++;
+
+        if(areWeStillWaiting) {
+            return setTimeout(getQuote, 15000);
+        }
     };
 
     let getIndex = async (storage) => {
+        areWeStillWaiting = true;
+
         headers = new Headers({
             'Authorization': 'Basic ' + toBase64(storage.login + ':' + storage.password),
             'Content-Type': 'application/json'
         });
 
-        let whileYouWait = setTimeout(getQuote, 5000);
+        getQuote();
 
         const epic = await getEpicInfo(storage.url);
         const jiras = await getJIRAs(storage.url, storage.jql);
+
+        if(jiras.code){
+            areWeStillWaiting = false;
+            let msg = '';
+
+            switch (jiras.code){
+                case '502':
+                    msg = 'The operation took longer then a minute, try to limit your query.'
+                    break;
+            }
+
+            return notify({
+                type: 'danger',
+                title: 'Huston we have a problem!',
+                message: msg
+            });
+        }
 
         let mapUser = new Map();
         let mapEpic = new Map();
@@ -257,7 +292,7 @@
             report = storage.report;
         }
 
-        clearInterval(whileYouWait);
+        areWeStillWaiting = false;
 
         storage.report.assignee = mapUser;
 
